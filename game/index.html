@@ -1,19 +1,125 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Solmar Bay — Open World Crime</title>
+<link rel="icon" href="data:,">
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a1420; font-family: Arial, Helvetica, sans-serif; }
+  #game, #game canvas { width: 100%; height: 100%; display: block; }
+  .hidden { display: none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; color: #fff; }
+  #hud-top-left { position: absolute; top: 14px; left: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .pill { background: rgba(8, 18, 28, 0.72); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 7px 12px; font-weight: bold; }
+  #health-row { display: flex; align-items: center; gap: 8px; min-width: 240px; }
+  #health-bar { flex: 1; height: 16px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.35); border-radius: 8px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #37c86a; transition: width 0.15s; }
+  #health-num { min-width: 28px; text-align: right; }
+  #money { font-size: 20px; color: #7dff9a; }
+  #stars { font-size: 24px; letter-spacing: 3px; color: #ffd23e; text-shadow: 0 0 8px rgba(0,0,0,0.7); }
+  #stars.hot { color: #ff5040; animation: blink 0.7s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.55; } }
+  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); max-width: 46%; text-align: center; font-size: 15px; line-height: 1.35; }
+  #objective-dist { display: block; color: #ffd23e; font-size: 13px; margin-top: 2px; }
+  #toast { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); background: rgba(8,18,28,0.85); border: 1px solid rgba(255,210,62,0.6); border-radius: 8px; padding: 10px 18px; font-size: 16px; font-weight: bold; opacity: 0; transition: opacity 0.25s; max-width: 70%; text-align: center; }
+  #toast.show { opacity: 1; }
+  #minimap-wrap { position: absolute; left: 14px; bottom: 14px; border: 2px solid rgba(255,255,255,0.45); border-radius: 6px; overflow: hidden; box-shadow: 0 0 12px rgba(0,0,0,0.5); }
+  #minimap { display: block; width: 200px; height: 200px; background: #23262c; }
+  #hud-bottom-right { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  #speed-row { display: none; align-items: baseline; gap: 6px; font-size: 34px; font-weight: bold; text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
+  #speed-row small { font-size: 14px; font-weight: normal; }
+  #weapon-row { font-size: 15px; }
+  #controls-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.75); text-shadow: 0 1px 3px #000; background: rgba(0,0,0,0.35); padding: 5px 10px; border-radius: 6px; }
+  #crosshair { display: none; position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+  #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+  #damage-flash { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,0.55) 100%); opacity: 0; z-index: 6; }
+
+  /* ---------- Screens ---------- */
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; color: #fff; text-align: center; background: linear-gradient(180deg, rgba(6,20,34,0.55) 0%, rgba(6,20,34,0.82) 100%); }
+  .screen h1 { font-size: 64px; letter-spacing: 6px; color: #ffd23e; text-shadow: 0 4px 0 #b8860b, 0 8px 24px rgba(0,0,0,0.8); }
+  .screen h2 { font-size: 26px; font-weight: normal; color: #bfe8ff; }
+  .screen .tag { font-size: 15px; color: #e8e8e8; max-width: 620px; line-height: 1.5; }
+  .btn { pointer-events: auto; cursor: pointer; font-size: 19px; font-weight: bold; color: #08202e; background: #ffd23e; border: none; border-radius: 10px; padding: 13px 34px; box-shadow: 0 4px 0 #b8860b; }
+  .btn:hover { background: #ffe06a; }
+  .btn.ghost { background: rgba(255,255,255,0.14); color: #fff; box-shadow: none; border: 1px solid rgba(255,255,255,0.5); }
+  .btn-row { display: flex; gap: 12px; }
+  .jobs { background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 14px 20px; text-align: left; font-size: 14px; line-height: 1.7; }
+  .jobs b { color: #ffd23e; }
+  .keys { font-size: 13px; color: #cfe6f5; line-height: 1.8; }
+  .keys b { color: #fff; background: rgba(255,255,255,0.16); border-radius: 4px; padding: 1px 6px; }
+  #wasted-screen h1 { color: #ff5040; text-shadow: 0 4px 0 #7a1000, 0 8px 24px rgba(0,0,0,0.8); }
+  #busted-screen h1 { color: #6aa8ff; text-shadow: 0 4px 0 #0a2a6a, 0 8px 24px rgba(0,0,0,0.8); }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<div id="game"></div>
+
+<div id="hud" class="hidden">
+  <div id="hud-top-left">
+    <div id="health-row" class="pill"><span>♥</span><div id="health-bar"><div id="health-fill"></div></div><span id="health-num">100</span></div>
+    <div id="money" class="pill">$250</div>
+    <div id="stars" class="pill">☆☆☆☆☆</div>
+  </div>
+  <div id="objective" class="pill">Press M to start the next job.<span id="objective-dist"></span></div>
+  <div id="toast"></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="200" height="200"></canvas></div>
+  <div id="hud-bottom-right">
+    <div id="speed-row"><span id="speed">0</span><small>km/h</small></div>
+    <div id="weapon-row" class="pill"><span id="weapon-name">Fists</span> · <span id="ammo">—</span></div>
+  </div>
+  <div id="controls-hint">WASD move · Mouse look · E enter/exit car · F punch · 1/2 weapon · R reload · M mission · P pause</div>
+  <div id="crosshair"></div>
+</div>
+<div id="damage-flash"></div>
+
+<div id="start-screen" class="screen">
+  <h1>SOLMAR BAY</h1>
+  <h2>An open-world crime game in the spirit of GTA 6</h2>
+  <p class="tag">Sun, sea and stolen cars. Explore a living beach city on foot and behind the wheel, outrun the Solmar Bay PD, and work three jobs for Rico and Mara — or just cause chaos and see how many stars you can earn.</p>
+  <div class="jobs">
+    <b>★ Hot Wheels</b> — steal a car, deliver it to the docks · $600<br>
+    <b>★ Mara's Getaway</b> — pick up Mara, lose a 3-star wanted level · $1,500<br>
+    <b>★ Pier Drop</b> — race a package to the end of the pier in 90 seconds · $2,500
+  </div>
+  <div class="btn-row">
+    <button id="play-btn" class="btn">▶ Play</button>
+    <button id="newgame-btn" class="btn ghost">New Game</button>
+  </div>
+  <p class="keys"><b>WASD</b> move &nbsp; <b>Mouse</b> look &nbsp; <b>Shift</b> run &nbsp; <b>Space</b> jump<br>
+  <b>E</b> enter / exit car &nbsp; <b>Click</b> shoot &nbsp; <b>F</b> punch &nbsp; <b>1 / 2</b> fists / pistol &nbsp; <b>R</b> reload<br>
+  <b>M</b> start job &nbsp; <b>P</b> pause &nbsp; <b>N</b> music on/off &nbsp; progress auto-saves</p>
+</div>
+
+<div id="pause-screen" class="screen hidden">
+  <h1>PAUSED</h1>
+  <div class="btn-row">
+    <button id="resume-btn" class="btn">Resume</button>
+    <button id="save-btn" class="btn ghost">Save Game</button>
+    <button id="quit-btn" class="btn ghost">Main Menu</button>
+  </div>
+</div>
+
+<div id="wasted-screen" class="screen hidden">
+  <h1>WASTED</h1>
+  <p class="tag">Solmar Bay chewed you up. You wake up at the plaza clinic, lighter in the wallet.</p>
+  <button id="respawn-btn" class="btn">Get Back Out There</button>
+</div>
+
+<div id="busted-screen" class="screen hidden">
+  <h1>BUSTED</h1>
+  <p class="tag">The SBPD caught up with you. Fine paid, record kept — back on the streets.</p>
+  <button id="busted-btn" class="btn">Walk Free</button>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
